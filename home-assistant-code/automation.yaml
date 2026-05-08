@@ -1,0 +1,125 @@
+alias: "Acceso Invitados: Abrir Puerta con Webhook v3"
+description: Valida PIN, ubicación y llama al callback del worker con el resultado
+triggers:
+  - trigger: webhook
+    webhook_id: add_your_webhook_id
+    local_only: false
+actions:
+  - variables:
+      lat_invitado: "{{ trigger.json.lat | float(0) }}"
+      lon_invitado: "{{ trigger.json.lon | float(0) }}"
+      request_id: "{{ trigger.json.request_id }}"
+      callback_url: "{{ trigger.json.callback_url }}"
+      secret: "{{ trigger.json.secret }}"
+      shelly: switch.shelly1minig3
+      lat_casa: 0.85111627396406
+      lon_casa: 0.414190715897117
+      radio_max: 50
+      distancia: >-
+        {% set lat1 = lat_casa | float %} {% set lon1 = lon_casa | float %} {%
+        set lat2 = lat_invitado | float %} {% set lon2 = lon_invitado | float %}
+        {% set dlat = (lat2 - lat1) * pi / 180 %} {% set dlon = (lon2 - lon1) *
+        pi / 180 %} {% set a = (dlat / 2) | sin ** 2 + (lat1 * pi / 180) | cos *
+            (lat2 * pi / 180) | cos * ((dlon / 2) | sin ** 2) %}
+        {{ (6371000 * 2 * (a ** 0.5 / (1 - a) ** 0.5) | atan) | round(1) }}
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: >-
+              {{ trigger.json.pin | string == states('input_text.pin_invitado')
+              | string }}
+          - condition: template
+            value_template: "{{ distancia | float <= radio_max }}"
+        sequence:
+          - action: rest_command.worker_callback
+            data:
+              callback_url: "{{ callback_url }}"
+              secret: "{{ secret }}"
+              request_id: "{{ request_id }}"
+              status: granted
+          - action: siren.turn_on
+            target:
+              device_id:
+                - device_id
+          - action: switch.turn_on
+            target:
+              entity_id: "{{ shelly }}"
+          - delay: "00:00:02"
+          - action: switch.turn_off
+            target:
+              entity_id: "{{ shelly }}"
+          - action: siren.turn_off
+            target:
+              device_id:
+                - device_id
+          - delay: "00:00:01"
+          - action: notify.mobile_app
+            data:
+              title: ✅ Puerta Abierta
+              message: >-
+                Acceso concedido a {{ distancia }}m de casa. El portón se
+                cerrará en 45s.
+              data:
+                image: /api/camera_proxy/camera.camara_puerta
+          - action: media_player.play_media
+            target:
+              entity_id:
+                - media_player.altavoz
+            data:
+              announce: true
+              media:
+                media_content_id: media-source://media_source/local/puerta_abierta.mp3
+                media_content_type: audio/mpeg
+                metadata: {}
+          - delay: "00:00:45"
+          - action: switch.turn_on
+            target:
+              entity_id: "{{ shelly }}"
+          - delay: "00:00:02"
+          - action: switch.turn_off
+            target:
+              entity_id: "{{ shelly }}"
+      - conditions:
+          - condition: template
+            value_template: >-
+              {{ trigger.json.pin | string == states('input_text.pin_invitado')
+              | string
+                 and distancia | float > radio_max }}
+        sequence:
+          - action: rest_command.worker_callback
+            data:
+              callback_url: "{{ callback_url }}"
+              secret: "{{ secret }}"
+              request_id: "{{ request_id }}"
+              status: too_far
+          - action: notify.mobile_app
+            data:
+              title: 📍 Ubicación Rechazada
+              message: PIN correcto pero demasiado lejos ({{ distancia }}m).
+      - conditions:
+          - condition: template
+            value_template: >-
+              {{ trigger.json.pin | string != states('input_text.pin_invitado')
+              | string }}
+        sequence:
+          - action: rest_command.worker_callback
+            data:
+              callback_url: "{{ callback_url }}"
+              secret: "{{ secret }}"
+              request_id: "{{ request_id }}"
+              status: wrong_pin
+          - action: notify.mobile_app
+            data:
+              title: 🚫 PIN Incorrecto
+              message: "Alguien intentó abrir el portón con PIN: {{ trigger.json.pin }}"
+          - action: media_player.play_media
+            target:
+              entity_id:
+                - media_player.altavoz
+            data:
+              announce: true
+              media:
+                media_content_id: media-source://media_source/local/pin_incorrecto.mp3
+                media_content_type: audio/mpeg
+                metadata: {}
+mode: single
