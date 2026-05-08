@@ -1,0 +1,5 @@
+# Contact to report vulnerabilities in abrelapuerta.uk
+Contact: CasaPlex@protonmail.com
+Expires: 2027-05-02T00:00:00.000Z
+Preferred-Languages: es, en
+Canonical: https://abrelapuerta.uk/.well-known/security.txt
