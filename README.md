@@ -8,7 +8,7 @@ A secure, geo-verified gate opener for Home Assistant. Guests can open your gate
 
 ## How it works
 
-![](diagrams\porton_system_diagram.svg)
+![diagram](diagrams/porton_system_diagram.svg)
 
 1. Guest opens the web app and enters the PIN
 2. The browser requests GPS coordinates
